@@ -1,0 +1,5 @@
+
+(load "Tests/plus")
+
+((plus 1.0) 1.0)
+

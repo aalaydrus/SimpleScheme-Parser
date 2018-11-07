@@ -1,0 +1,131 @@
+options
+{
+	STATIC = false;
+	OUTPUT_DIRECTORY = "parser";
+}
+
+PARSER_BEGIN(SimpleSchemeParser)
+
+package parser;
+
+import java.io.*;
+import java.util.*;
+import ast.*;
+
+	public class SimpleSchemeParser
+	{
+		private static boolean runSubstitutionTest = true;
+
+		public static void main( String[] Args )
+		{
+	  		try
+  			{
+  			  	String lUnitName = Args[0];
+
+  			  	if ( !lUnitName.endsWith( ".ssu" ) )
+					lUnitName += ".ssu";
+  			  	
+   				SimpleSchemeParser lParser = new SimpleSchemeParser( new FileInputStream( lUnitName ) );
+
+   				ArrayList<SchemeExpression> lExpressions = lParser.SimpleSchemeUnit();
+	      
+				Hashtable<Variable,SchemeExpression> lSymbolTable = new Hashtable<Variable, SchemeExpression>();
+				lSymbolTable.put( new Variable( "succ" ), new ast.builtin.IncrementAbstraction() );
+				lSymbolTable.put( new Variable( "pred" ), new ast.builtin.DecrementAbstraction() );
+				lSymbolTable.put( new Variable( "isZero" ), new ast.builtin.ZeroAbstraction() );
+				lSymbolTable.put( new Variable( "notZero" ), new ast.builtin.NotZeroAbstraction() );
+				
+				SchemeExpression Result = null;
+				
+				for ( SchemeExpression e : lExpressions )
+				{
+					Result = e.reduce( lSymbolTable );
+				}
+				
+				System.out.println( Result );
+  			}
+			catch (ParseException e)
+  			{
+    			System.out.println("Syntax Error : \n"+ e.toString());
+  			}
+  			catch (FileNotFoundException e)
+  			{
+    			System.out.println( e.toString() );
+  			}
+		}
+	}
+
+PARSER_END(SimpleSchemeParser)
+
+SKIP :
+{ 
+		// white space
+		" " 
+	| 
+		"\t" 
+	| 
+		"\r" 
+	|
+		"\n"
+	|
+		// one line comment
+	  	<  "//" (~["\n"])* "\n" >
+}
+
+ArrayList<SchemeExpression> SimpleSchemeUnit() :
+{
+	ArrayList<SchemeExpression> Result = new ArrayList<SchemeExpression>();
+	SchemeExpression e;
+}
+{
+	(e=SchemeExp() { Result.add( e ); })* <EOF>
+    { return Result; }
+}
+
+// SchemeExpression
+
+SchemeExpression SchemeExp() :
+{
+	Token t;
+	SchemeExpression e1, e2, e3;
+}
+{
+		t=< Constant >
+		{ return new Constant( t.image ); }
+	|
+		t=< Identifier >
+		{ return new Variable( t.image ); }
+	|
+		LOOKAHEAD(2)
+		"(" "define" t=< Identifier > e1=SchemeExp() ")"
+		{ return new Declaration( new Variable( t.image ), e1 ); }
+	|
+		LOOKAHEAD(2)
+		"(" "load" t=< String > ")"
+		{ return new Load( t.image.substring( 1, t.image.length() - 1 ) ); }
+	|
+		LOOKAHEAD(2)
+		"(" "if" e1=SchemeExp() e2=SchemeExp() e3=SchemeExp() ")"
+		{ return new IfThenElse( e1, e2, e3 ); }
+	|
+		LOOKAHEAD(2)
+		"(" "lambda" t=< Identifier > "." e1=SchemeExp() ")"
+		{ return new Abstraction( new Variable( t.image ), e1 ); }
+	|
+		"(" e1=SchemeExp() e2=SchemeExp() ")"
+		{ return new Application( e1, e2 ); }
+}
+
+TOKEN :
+{
+		// string
+		< String : "\"" (~["\""])* "\"" >
+	|
+	    < #EXPONENT : "E" ("+"|"-")? (["0"-"9"])+ >
+    |
+        // scientific floating-point
+	    < Constant : (["0"-"9"])+ ("." (["0"-"9"])*)? (< EXPONENT >)? >
+	|
+		// identifier
+		< Identifier : ["a"-"z","A"-"Z"] (["a"-"z","A"-"Z","0"-"9","_"])* >
+}
